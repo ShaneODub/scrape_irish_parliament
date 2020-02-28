@@ -7,65 +7,87 @@ rm(list = ls())
 # Pacman will help to load and install any required packages
 install.packages("pacman")
 
-pacman::p_load(rvest, dplyr)
+pacman::p_load(rvest, dplyr, stringr)
 
 # Use read_html to grab the webpages --------------------------------------
 
-# Members of current and previous parliaments are listed on this URL:
-url <-
+# This is the first part of the URL string for the pages we want to scrape:
+url_stem <-
   "https://www.oireachtas.ie/en/members/tds/?term=%2Fie%2Foireachtas%2Fhouse%2Fdail%2F"
 
-# We'll store the pages after scraping
-list_of_pages <- vector("list", 72)
+list_of_pages <- vector("list", 400)
 
-# Now loop through the 26th to 33rd Dail, grabbing and storing 9 pages from each.
-for (term in 26:33) {
-  for (page in 1:9){
-    list_of_pages[[page + 9 * (term - 26)]] <-
-      paste0(url, term, '&tab=constituency&page=', page) %>%
+list_position <- 0
+
+# Now loop through the website reading & storing html pages in a list.
+for (term in 1:33) {
+  
+  # Step 1: Check how many pages of results there are for any given Dáil
+  last_page <- 
+    paste0(url_stem, term, '&tab=constituency&page=1') %>%
+    read_html() %>% 
+    html_node(css = "#constituency .c-page-num__ref") %>% 
+    html_text() %>%
+    str_remove(" 1 of ") %>%
+    as.numeric()
+  
+  
+  # Step 2: Download the number of pages we determined in step 1.
+  for (page in 1:last_page){
+    
+    full_url <- paste0(url_stem, term, '&tab=constituency&page=', page)
+    
+    list_position <- list_position + 1
+    
+    list_of_pages[[list_position]] <-
+      full_url %>%
       read_html()
-    Sys.sleep(3)
-    print(page + 9 * (term - 26))
+    
+    print(paste("Term", term, "Page", page, "of", last_page))
+    
+    Sys.sleep(10)
   }
 }
 
-# Output the list so I won't have to scrape again
-saveRDS(list_of_pages, file = "output//list_of_pages.rds")
-
+# We downloaded 267 pages. Dropping the null entries at the end of the list.
+list_of_pages <- list_of_pages[1:267]
 
 # Use html_nodes etc.to scrape from the downloaded webpages --------------
 
-list_of_pages <- readRDS("output//list_of_pages.rds")
-
-tibble_list = vector("list", 72)
-for (i in 1:72){
+scrape_and_tibble <- function(page){
   
-  tibble_list[[i]] <-
-    tibble(
-      full_name = list_of_pages[[i]] %>%
+  # Grab 7 pieces of information from each page and stick them in a tibble
+  tibble(
+    full_name = page %>%
       html_nodes(css = "#constituency .c-member-list-item__name-content") %>%
       html_text(),
-    constituency = list_of_pages[[i]] %>% 
+    constituency = page %>% 
       html_nodes(css = "#constituency .c-member-list-item__constituency-content") %>%
       html_text(),
-    party = list_of_pages[[i]] %>% 
+    party = page %>% 
       html_nodes(css = "#constituency .c-member-list-item__party-content") %>%
       html_text(),
-    profile_url = list_of_pages[[i]] %>% 
+    profile_url = page %>% 
       html_nodes(css = "#constituency .u-btn-secondary") %>%
       html_attr("href"),
-    dail_term = list_of_pages[[i]]  %>% 
+    dail_term = page %>% 
       html_nodes(css = ".text-results span") %>%
       html_text() %>%
       nth(2),
-    dail_period = list_of_pages[[i]]  %>% 
+    dail_period = page %>% 
       html_nodes(css = ".text-results span") %>%
       html_text() %>%
-      nth(4)
+      nth(4),
+    number_of_seats = page %>% 
+      html_nodes(css = ".text-results span") %>%
+      html_text() %>%
+      nth(6),
   )
 }
-  
-eight_dail_terms <- bind_rows(tibble_list)
-  
 
+# Make 267 tibbles and then bind them into one big tibble.
+all_parliaments <-
+  lapply(list_of_pages, scrape_and_tibble) %>%
+  bind_rows()
 
+saveRDS(all_parliaments, file = "output//all_parliaments.rds")
