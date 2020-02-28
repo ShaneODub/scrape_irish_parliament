@@ -7,7 +7,7 @@ rm(list = ls())
 # Pacman will help to load and install any required packages
 install.packages("pacman")
 
-pacman::p_load(rvest, dplyr, stringr)
+pacman::p_load(rvest, dplyr, stringr, ggplot2, tidyr)
 
 # Use read_html to grab the webpages --------------------------------------
 
@@ -54,9 +54,9 @@ list_of_pages <- list_of_pages[1:267]
 
 # Use html_nodes etc.to scrape from the downloaded webpages --------------
 
+# Function to grab 7 pieces of information from each page and stick them in a tibble
 scrape_and_tibble <- function(page){
   
-  # Grab 7 pieces of information from each page and stick them in a tibble
   tibble(
     full_name = page %>%
       html_nodes(css = "#constituency .c-member-list-item__name-content") %>%
@@ -91,3 +91,38 @@ all_parliaments <-
   bind_rows()
 
 saveRDS(all_parliaments, file = "output//all_parliaments.rds")
+
+
+# Little bit of fixing and cleaning  ----------------------------------------
+
+all_parliaments$term_number <-
+  all_parliaments$dail_term %>%
+  str_remove_all("[^0-9]") %>% 
+  as.numeric()
+
+all_parliaments <- 
+  all_parliaments %>% 
+  mutate(dail_period = replace(dail_period,
+                               dail_period == "(2016 - )",
+                               "(2016 - 2020)"))
+
+all_parliaments <-  
+  all_parliaments %>% 
+  mutate(constituency = if_else(full_name == "Seán Ó Fearghaíl"
+                                & dail_term == "31st Dáil",
+                                "Kildare South",
+                                constituency),
+         party = if_else(full_name == "Thomas J. Fitzpatrick"
+                         & dail_term == "25th Dáil",
+                         "Fine Gael",
+                         party))
+
+# Save the data to local drive --------------------------------------------
+
+
+saveRDS(all_parliaments,
+        file = "output//all_parliaments.rds")
+
+write.csv(all_parliaments,
+          file = "output//all_parliaments.csv",
+          row.names = FALSE)
