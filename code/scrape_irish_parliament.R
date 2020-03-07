@@ -1,13 +1,13 @@
 
 # Libraries and setup -----------------------------------------------------
 
-# First, wiple the slate clean
+# First, wipe the slate clean
 rm(list = ls())
 
 # Pacman will help to load and install any required packages
 install.packages("pacman")
 
-pacman::p_load(rvest, dplyr, stringr, ggplot2, tidyr)
+pacman::p_load(rvest, dplyr, stringr, tidyr)
 
 # Use read_html to grab the webpages --------------------------------------
 

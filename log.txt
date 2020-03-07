@@ -1,0 +1,5 @@
+05/03/2020: Putting the .Rmd document together in R Studio. Can run the r2jekyll script that converts it to a .markdown document in the shaneodub.github.io folder, and serve it locally. Can't get images to appear in the converted version.
+
+06/03/2020 Spent hours tricking around with it, Tried include_graphics() in the .Rmd file, and tried getting the r2jekyll script to copy image files to the {{ site.url }} folder. Don't understand how these image files are being handled. 
+
+07/03 Finally solved it. Needed to preface image folder location with {{ site.url }} in the .Rmd. This creates/uses a local folder called {{ site.url }} but it also means that the image url in the html is an absolute rather than relative reference.
