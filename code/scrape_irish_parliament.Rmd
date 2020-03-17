@@ -1,20 +1,21 @@
 ---
 title: 'Web scraping with R: 101 years of Irish politics'
 author: "Shane O Neill"
-date: "05/03/2020"
-img: scrape-irish-parliament.jpg
+date: "15/03/2020"
+img: scrape-irish-parliament-header.jpg
 layout: post
 tags:
 - rvest
 - R
 - scraping
+- ireland
+- politics
 description: Scraping Irish parliamentary data using R.
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_chunk$set(fig.path='{{ site.url }}/images/scrape-irish-parliament-')
-library(knitr)
+knitr::opts_chunk$set(fig.path = "{{ site.url }}/images/scrape-irish-parliament-")
 ```
 
 ## How do you scrape data with R?
@@ -23,21 +24,185 @@ I'll walk you through the method that I'm familiar with, using the *rvest* packa
 
 First, I'll use *pacman* to install some packages that we'll need.
 
-```{r libraries, eval = FALSE}
-install.packages("pacman")
+```{r libraries, message=FALSE, warning=FALSE}
+install.packages("pacman", repos = "http://cran.us.r-project.org")
 
 pacman::p_load(rvest, dplyr, stringr, tidyr)
 ```
 
+## Next, let's have a look at the website we're going to scrape.
 
-```{r deputies, echo = FALSE}
-include_graphics("{{ site.url }}/images/screenshot_deputies.png")
+If you click the following link you'll see a list of 9 Dáil deputies who were members of the 30th Dáil:
+
+https://www.oireachtas.ie/en/members/tds/?term=%2Fie%2Foireachtas%2Fhouse%2Fdail%2F30&page=9
+
+Let's assign the url to a variable:
+
+```{r}
+
+full_url <- 'https://www.oireachtas.ie/en/members/tds/?term=%2Fie%2Foireachtas%2Fhouse%2Fdail%2F30&page=9'
+
 ```
 
-In this specific example, there are several elements that I want to extract from each webpage, so I'll download the pages in their entirety before extracing what I need and storing it in a dataframe.
+We can grab the entire page using the *read_html* function and store it:
 
-```{r cars}
-summary(cars)
+```{r}
+downloaded_page <- 
+  full_url %>%
+  read_html
+```
+
+We can grab the names of the deputies using *html_nodes* and *html_text*.
+
+```{r}
+full_name <-   
+  downloaded_page %>%
+  html_nodes(css = "#constituency .c-member-list-item__name-content") %>%
+  html_text()
+```
+
+We get the following character vector containing the names of the nine politicians:
+
+[1] "Leo Varadkar"&nbsp;&nbsp;&nbsp;"Jack Wall"&nbsp;&nbsp;&nbsp;"Mary Wallace"
+
+[4] "Mary White"&nbsp;&nbsp;&nbsp;"Michael Woods"&nbsp;&nbsp;&nbsp;"Caoimhghín Ó Caoláin"
+
+[7] "Éamon Ó Cuív"&nbsp;&nbsp;&nbsp;"Seán Ó Fearghaíl"&nbsp;&nbsp;&nbsp;"Aengus Ó Snodaigh"
+
+Where did I get the <span style="color: #DD1144;">"#constituency .c-member-list-item__name-content"</span>, above, to tell the *html_nodes* function what to grab? That's where http://selectorgadget.com/ comes in. It's a really useful chrome add-in that allows you to hover a pointer over a web-page element so that you can see what CSS tags are associated with it.
+
+If we use different CSS, we get different results. For example, we can grab the constituencies of the nine politicians:
+
+```{r}
+constituency <-   
+  downloaded_page %>%
+  html_nodes(css = "#constituency .c-member-list-item__constituency-content") %>%
+  html_text()
+```
+
+[1] "Dublin West"&nbsp;&nbsp;&nbsp;"Kildare South"&nbsp;&nbsp;&nbsp;"Meath East"
+
+[4] "Carlow-Kilkenny"&nbsp;&nbsp;&nbsp;"Dublin North-East"&nbsp;&nbsp;&nbsp;"Cavan-Monaghan"
+
+[7] "Galway West"&nbsp;&nbsp;&nbsp;"Kildare South"&nbsp;&nbsp;&nbsp;"Dublin South-Central"
+
+Downloading and scraping a single web-page is all well and good, but it's more useful to be able to process a bunch of pages at once.
+
+We'll download all of the records since the first parliament was elected in 1919, right up until the 33rd parliament in 2020.
+
+Let's break the url down into usable chunks:
+
+* https://www.oireachtas.ie/en/members/tds/?term=%2Fie%2Foireachtas%2Fhouse%2Fdail%2F
+
+* <span style="color: #338FD0;">30</span>
+
+* <span style="color: #338FD0">&page=</span>
+
+* <span style="color: #338FD0;">9</span>
+
+We assign the first part of the url to a variable:
+
+```{r}
+url_stem <- 'https://www.oireachtas.ie/en/members/tds/?term=%2Fie%2Foireachtas%2Fhouse%2Fdail%2F'
+```
+
+We set up an empty list to store the downloaded pages. The list will only hold about 300 pages but I'll make the size 400 for now, just in case:
+
+```{r}
+list_of_pages <- vector("list", 400)
+
+list_position <- 1
+```
+
+We use nested for-loops to cycle through all 33 Dáil terms and all pages from each Dáil term. There's a useful bit of text on the first page of each Dáil term that will tell us how many pages of deputies there are for that term.
+
+```{r}
+for (term in 1:1) {
+  
+  # Step 1: Grab the text from page 1 that says ' 1 of 8 ' (for example)
+  #         and store the '8' as 'number_of_pages'
+  number_of_pages <-
+    paste0(url_stem, term, '&page=1') %>%
+    read_html() %>%
+    html_node(css = "#constituency .c-page-num__ref") %>%
+    html_text() %>%
+    str_remove(" 1 of ") %>%
+    as.numeric()
+  
+  # Step 2: Download the number of pages we determined in step 1 and
+  #         store each page in the 'list_of_pages': 
+  for (page in 1:1) {
+    full_url <- paste0(url_stem, term, '&page=', page)
+    list_of_pages[[list_position]] <- full_url %>% read_html()
+    list_position <- list_position + 1
+    Sys.sleep(10) 
+  }
+}
+```
+
+We downloaded 267 pages. We can truncate the list to drop the NULL entries at the end.
+```{r}
+list_of_pages <- list_of_pages[1:1]
+```
+
+Now we define a function that grabs three pieces of information from the top of a downloaded page, as well as four pieces of information for each deputy on the page.
+
+The four pieces of information for each depuy are:
+* full name
+* constituency
+* party
+* profile_url
+
+There are up to 20 deputies on each page, so there will be up to 20 names stored in a names vector, 20 constituencies stored in a constituency vector, etc.
+
+The three pieces of information from the top of the page are:
+* Dáil term
+* Dáil period 
+* number of seats
+
+Even though these items only appear once on the page, the tibble function repeats these single values up to 20 times to match the length of the first four vectors as it combines all 7 vectors into one tibble (i.e. a dataframe).
+```{r}
+scrape_and_tibble <- function(page) {
+  tibble(
+    full_name = page %>%
+      html_nodes(css = "#constituency .c-member-list-item__name-content") %>%
+      html_text(),
+    constituency = page %>%
+      html_nodes(css = "#constituency .c-member-list-item__constituency-content") %>%
+      html_text(),
+    party = page %>%
+      html_nodes(css = "#constituency .c-member-list-item__party-content") %>%
+      html_text(),
+    profile_url = page %>%
+      html_nodes(css = "#constituency .u-btn-secondary") %>%
+      html_attr("href"),
+    dail_term = page %>%
+      html_nodes(css = ".text-results span") %>%
+      html_text() %>%
+      nth(2),
+    dail_period = page %>%
+      html_nodes(css = ".text-results span") %>%
+      html_text() %>%
+      nth(4),
+    number_of_seats = page %>%
+      html_nodes(css = ".text-results span") %>%
+      html_text() %>%
+      nth(6),
+  )
+}
+```
+
+For example, here's the result if we apply scrape_and_tibble to the the first page we downloaded:
+
+```{r, echo=FALSE, out.width = "1024px"}
+knitr::include_graphics("{{ site.url }}\\images\\scraped_and_tibbled_page.PNG")
+```
+
+We use lapply to apply the 'scrape_and_tibble' function to the 'list_of_pages'. This produces a list of 267 tibbles, which we then 'bind_row' into one giant tibble to rule them all.
+```{r}
+all_parliaments <-
+  lapply(list_of_pages, scrape_and_tibble) %>%
+  bind_rows()
 ```
 
 ## Including Plots
